@@ -5,12 +5,14 @@
 // (KEM), a key derivation function (KDF), and an authenticated encryption
 // scheme with additional data (AEAD).
 //
+// Applications that only need the Export interface may select the export-only
+// AEAD identifier AEAD_ExportOnly (0xFFFF, RFC 9180 Sections 5.3 and 7.3). Such
+// a suite derives the exporter secret with the standard key schedule but skips
+// the AEAD key and base nonce, so Export works while Seal, Open, and AEAD.New
+// return ErrAEADExportOnly.
+//
 // Specification in
 // https://datatracker.ietf.org/doc/draft-irtf-cfrg-hpke
-//
-// BUG(cjpatton): This package does not implement the "Export-Only" mode of the
-// HPKE context. In particular, it does not recognize the AEAD codepoint
-// reserved for this purpose (0xFFFF).
 package hpke
 
 import (
@@ -42,6 +44,9 @@ type Sealer interface {
 	Context
 	// Seal takes a plaintext and associated data to produce a ciphertext.
 	// The nonce is handled by the Sealer and incremented after each call.
+	//
+	// Seal returns ErrAEADExportOnly and no ciphertext when the suite was
+	// built with AEAD_ExportOnly, which has no AEAD key or base nonce.
 	Seal(pt, aad []byte) (ct []byte, err error)
 }
 
@@ -51,6 +56,9 @@ type Opener interface {
 	// Open takes a ciphertext and associated data to recover, if successful,
 	// the plaintext. The nonce is handled by the Opener and incremented after
 	// each call.
+	//
+	// Open returns ErrAEADExportOnly when the suite was built with
+	// AEAD_ExportOnly, which has no AEAD key or base nonce.
 	Open(ct, aad []byte) (pt []byte, err error)
 }
 
@@ -280,4 +288,5 @@ var (
 	ErrInvalidKEMSharedSecret = errors.New("hpke: invalid KEM shared secret")
 	ErrInvalidKEMDeriveKey    = errors.New("hpke: too many tries to derive KEM key")
 	ErrAEADSeqOverflows       = errors.New("hpke: AEAD sequence number overflows")
+	ErrAEADExportOnly         = errors.New("hpke: AEAD is not available in export-only mode")
 )

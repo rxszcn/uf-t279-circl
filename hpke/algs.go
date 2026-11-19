@@ -171,10 +171,17 @@ const (
 	AEAD_AES256GCM AEAD = 0x02
 	// AEAD_ChaCha20Poly1305 is ChaCha20 stream cipher and Poly1305 MAC.
 	AEAD_ChaCha20Poly1305 AEAD = 0x03
+	// AEAD_ExportOnly is the export-only AEAD identifier reserved by RFC 9180
+	// (Section 7.3). A suite built with this identifier supports the Export
+	// interface only: the key schedule omits the AEAD key and base nonce
+	// (Nk, Nn and Nt are N/A), so Seal, Open and New are unavailable and
+	// return ErrAEADExportOnly. See RFC 9180 Sections 5.3 and 7.3.
+	AEAD_ExportOnly AEAD = 0xFFFF
 )
 
 // New instantiates an AEAD cipher from the identifier, returns an error if the
-// identifier is not known.
+// identifier is not known. AEAD_ExportOnly is a known identifier that does not
+// provide an AEAD cipher, so New returns ErrAEADExportOnly for it.
 func (a AEAD) New(key []byte) (cipher.AEAD, error) {
 	switch a {
 	case AEAD_AES128GCM, AEAD_AES256GCM:
@@ -185,23 +192,31 @@ func (a AEAD) New(key []byte) (cipher.AEAD, error) {
 		return cipher.NewGCM(block)
 	case AEAD_ChaCha20Poly1305:
 		return chacha20poly1305.New(key)
+	case AEAD_ExportOnly:
+		return nil, ErrAEADExportOnly
 	default:
 		panic(ErrInvalidAEAD)
 	}
 }
 
+// IsValid returns true if the AEAD identifier is supported by the HPKE
+// package. AEAD_ExportOnly is a valid identifier even though it does not
+// provide an AEAD cipher; see New.
 func (a AEAD) IsValid() bool {
 	switch a {
 	case AEAD_AES128GCM,
 		AEAD_AES256GCM,
-		AEAD_ChaCha20Poly1305:
+		AEAD_ChaCha20Poly1305,
+		AEAD_ExportOnly:
 		return true
 	default:
 		return false
 	}
 }
 
-// KeySize returns the size in bytes of the keys used by the AEAD cipher.
+// KeySize returns the size in bytes of the keys used by the AEAD cipher. It
+// returns 0 for AEAD_ExportOnly, which has no key (RFC 9180 Section 7.3 lists
+// Nk as N/A).
 func (a AEAD) KeySize() uint {
 	switch a {
 	case AEAD_AES128GCM:
@@ -210,29 +225,38 @@ func (a AEAD) KeySize() uint {
 		return 32
 	case AEAD_ChaCha20Poly1305:
 		return chacha20poly1305.KeySize
+	case AEAD_ExportOnly:
+		return 0
 	default:
 		panic(ErrInvalidAEAD)
 	}
 }
 
-// NonceSize returns the size in bytes of the nonce used by the AEAD cipher.
+// NonceSize returns the size in bytes of the nonce used by the AEAD cipher. It
+// returns 0 for AEAD_ExportOnly, which has no nonce (RFC 9180 Section 7.3
+// lists Nn as N/A).
 func (a AEAD) NonceSize() uint {
 	switch a {
 	case AEAD_AES128GCM,
 		AEAD_AES256GCM,
 		AEAD_ChaCha20Poly1305:
 		return 12
+	case AEAD_ExportOnly:
+		return 0
 	default:
 		panic(ErrInvalidAEAD)
 	}
 }
 
 // CipherLen returns the length of a ciphertext corresponding to a message of
-// length mLen.
+// length mLen. It returns 0 for AEAD_ExportOnly, which defines no ciphertext
+// (RFC 9180 Section 7.3 lists Nt as N/A).
 func (a AEAD) CipherLen(mLen uint) uint {
 	switch a {
 	case AEAD_AES128GCM, AEAD_AES256GCM, AEAD_ChaCha20Poly1305:
 		return mLen + 16
+	case AEAD_ExportOnly:
+		return 0
 	default:
 		panic(ErrInvalidAEAD)
 	}

@@ -76,6 +76,12 @@ func (c *encdecContext) increment() error {
 }
 
 func (c *sealContext) Seal(pt, aad []byte) ([]byte, error) {
+	// AEAD_ExportOnly suites have no AEAD key or base nonce (RFC 9180
+	// Sections 5.3 and 7.3), so encryption is unavailable. Report it
+	// explicitly instead of dereferencing a nil AEAD.
+	if c.suite.aeadID == AEAD_ExportOnly {
+		return nil, ErrAEADExportOnly
+	}
 	ct := c.AEAD.Seal(nil, c.calcNonce(), pt, aad)
 	err := c.increment()
 	if err != nil {
@@ -88,6 +94,12 @@ func (c *sealContext) Seal(pt, aad []byte) ([]byte, error) {
 }
 
 func (c *openContext) Open(ct, aad []byte) ([]byte, error) {
+	// AEAD_ExportOnly suites have no AEAD key or base nonce (RFC 9180
+	// Sections 5.3 and 7.3), so decryption is unavailable. Report it
+	// explicitly instead of dereferencing a nil AEAD.
+	if c.suite.aeadID == AEAD_ExportOnly {
+		return nil, ErrAEADExportOnly
+	}
 	pt, err := c.AEAD.Open(nil, c.calcNonce(), ct, aad)
 	if err != nil {
 		return nil, err

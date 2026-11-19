@@ -20,6 +20,26 @@ func (st state) keySchedule(ss, info, psk, pskID []byte) (*encdecContext, error)
 
 	secret := st.labeledExtract(ss, []byte("secret"), psk)
 
+	// RFC 9180 Section 5.3: applications that use only the Export interface
+	// select AEAD_ExportOnly and may skip the key and base_nonce derivations,
+	// which the Export interface does not consume. The context keeps empty
+	// key, base nonce and sequence number fields, and carries no AEAD.
+	if st.aeadID == AEAD_ExportOnly {
+		exporterSecret := st.labeledExpand(
+			secret,
+			[]byte("exp"),
+			keySchCtx,
+			uint16(st.kdfID.ExtractSize()),
+		)
+		return &encdecContext{
+			suite:              st.Suite,
+			sharedSecret:       ss,
+			secret:             secret,
+			keyScheduleContext: keySchCtx,
+			exporterSecret:     exporterSecret,
+		}, nil
+	}
+
 	Nk := uint16(st.aeadID.KeySize())
 	key := st.labeledExpand(secret, []byte("key"), keySchCtx, Nk)
 

@@ -65,9 +65,15 @@ func unmarshalContext(raw []byte) (*encdecContext, error) {
 		return nil, errors.New("invalid key length")
 	}
 
-	c.AEAD, err = c.suite.aeadID.New(c.key)
-	if err != nil {
-		return nil, err
+	// AEAD_ExportOnly contexts carry no AEAD (RFC 9180 Sections 5.3 and 7.3)
+	// and serialize with empty key, base nonce, and sequence number fields.
+	// They are recognized from the suite, which unmarshalContext has already
+	// validated, so no cipher is instantiated.
+	if c.suite.aeadID != AEAD_ExportOnly {
+		c.AEAD, err = c.suite.aeadID.New(c.key)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	Nn := int(c.suite.aeadID.NonceSize())
@@ -95,6 +101,10 @@ func unmarshalContext(raw []byte) (*encdecContext, error) {
 //	    opaque base_nonce<0..255>;
 //	    opaque seq<0..255>;
 //	} HpkeContext;
+//
+// For a context built with AEAD_ExportOnly the key, base_nonce, and seq fields
+// serialize as zero-length opaque vectors, so the encoding stays readable and
+// round-trips; see RFC 9180 Sections 5.3 and 7.3.
 //
 //	struct {
 //	  HpkeRole role = 0; // sealer
